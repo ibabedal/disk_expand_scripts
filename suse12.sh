@@ -74,46 +74,64 @@ function expand_gpt_os_disk()
 	fi
 }
 
-root_partition_name=$(df --output=source $mount_point | awk 'NR==2{print $1}')
+# Needed checks before start 
 
-if [ $root_partition_name == *'mapper'* ]
+function expantion_prerequisite()
+{
+    root_partition_name=$(df --output=source $mount_point | awk 'NR==2{print $1}')
+    if [ $root_partition_name == *'mapper'* ]
+    then
+        echo "This is LVM setup, not supported on this script for SUSE, Manual intervension needed" >> $LOGFILE
+        exit 1
+    else
+        echo "Starting checking below items:
+            - OS disk name
+            - OS disk size
+            - root partition name and number
+            - root partition size 
+            - Disk label
+        " >> $LOGFILE
+        os_disk_name=${root_partition_name%?}
+        partition_number=${root_partition_name: -1}
+        disk_label=$(fdisk -l $os_disk_name | grep Disklabel | cut -d":" -f2)
+        # Validate that partition size is less than disk size
+        os_disk_size_metadata=$(curl -s -H Metadata:true --noproxy "*" "http://169.254.169.254/metadata/instance/compute/storageProfile/osDisk/diskSizeGB?api-version=2020-09-01&format=text" )
+        os_disk_size_withG=$(lsblk -n -o SIZE $os_disk_name | awk 'NR==1{print $1}')
+        os_disk_size=${os_disk_size_withG%?}
+        root_partition_sizewithG=$(lsblk -n -o SIZE $root_partition_name | awk 'NR==1{print $1}')
+        root_partition_size=${root_partition_sizewithG%?}
+        
+        if [ $os_disk_size == $os_disk_size_metadata ]
+        then
+            #echo $os_disk_size ; echo $os_disk_size_metadata
+            #echo $os_disk_name; echo $root_partition_name ; echo $partition_number ; echo $disk_label
+            echo "OS disk size is the same as in the platform, moving to expantion process" >> $LOGFILE
+            if [ $disk_label == "gpt" ]
+            then
+                echo "The disk label is GPT , switching to GPT expand disk function" >> $LOGFILE
+                expand_gpt_os_disk $os_disk_name $partition_number $mount_point
+            else
+                echo "The disk label is MBR, running MBR expand function" >> $LOGFILE
+                # TODO create MBR function
+                exit 3
+            fi
+
+        else
+            echo "Plesae make sure that the disk is expanded from portal and the VM is restarted" >> $LOGFILE
+        fi
+    fi
+}
+
+
+
+
+#starting main function
+cloud_init_status=$(systemctl is-enabled cloud-init-local.service)
+if [ $cloud_init_status == "enabled" ]
 then
-	echo "This is LVM setup, not supported on this script for SUSE, Manual intervension needed" >> $LOGFILE
-	exit 1
+    echo "Cloud-init is exsits, leaving the expantion process to it" >> $LOGFILE
+    echo "Cloud-init is exsits, leaving the expantion process to it"
+    exit 0
 else
-	echo "Starting checking below items:
-		- OS disk name
-		- OS disk size
-		- root partition name and number
-		- root partition size 
-		- Disk label
-	" >> $LOGFILE
-	os_disk_name=${root_partition_name%?}
-	partition_number=${root_partition_name: -1}
-	disk_label=$(fdisk -l $os_disk_name | grep Disklabel | cut -d":" -f2)
-	# Validate that partition size is less than disk size
-	os_disk_size_metadata=$(curl -s -H Metadata:true --noproxy "*" "http://169.254.169.254/metadata/instance/compute/storageProfile/osDisk/diskSizeGB?api-version=2020-09-01&format=text" )
-	os_disk_size_withG=$(lsblk -n -o SIZE $os_disk_name | awk 'NR==1{print $1}')
-	os_disk_size=${os_disk_size_withG%?}
-	root_partition_sizewithG=$(lsblk -n -o SIZE $root_partition_name | awk 'NR==1{print $1}')
-	root_partition_size=${root_partition_sizewithG%?}
-	
-	if [ $os_disk_size == $os_disk_size_metadata ]
-	then
-		#echo $os_disk_size ; echo $os_disk_size_metadata
-		#echo $os_disk_name; echo $root_partition_name ; echo $partition_number ; echo $disk_label
-		echo "OS disk size is the same as in the platform, moving to expantion process" >> $LOGFILE
-		if [ $disk_label == "gpt" ]
-		then
-			echo "The disk label is GPT , switching to GPT expand disk function" >> $LOGFILE
-			expand_gpt_os_disk $os_disk_name $partition_number $mount_point
-		else
-			echo "The disk label is MBR, running MBR expand function" >> $LOGFILE
-			# TODO create MBR function
-			exit 3
-		fi
-
-	else
-		echo "Plesae make sure that the disk is expanded from portal and the VM is restarted" >> $LOGFILE
-	fi
+    expantion_prerequisite
 fi
