@@ -49,7 +49,7 @@ function expand_gpt_os_disk()
 	echo "Installing growpart utility to help in the expantion" >> $LOGFILE
 	zypper install -l -y growpart 1> /dev/null 
 	echo "Running below command to expand : growpart $disk_dev_name $mount_point_partition_number " >> $LOGFILE
-	growpart $disk_dev_name $mount_point_partition_number
+	growpart $disk_dev_name $mount_point_partition_number 1>> $LOGFILE
 	echo "Done expanding the partition" >> $LOGFILE
 	echo "OS disk partition table after the expantion" >> $LOGFILE
 	lsblk $disk_dev_name >> $LOGFILE
@@ -59,13 +59,13 @@ function expand_gpt_os_disk()
 	if [ $mount_point_fs_type == "xfs" ]
 	then
 		echo "Running below command to expand file system: xfs_growfs $mount_point_requested" >> $LOGFILE
-		xfs_growfs $mount_point_requested
-		echo "The file system size after expandtion , running df -Th $mount_point_requested" >> $LOGFILE
+		xfs_growfs $mount_point_requested 1>> $LOGFILE
+ 		echo "The file system size after expandtion , running df -Th $mount_point_requested" >> $LOGFILE
 		df -Th $mount_point_requested >> $LOGFILE
 	elif [ $mount_point_fs_type == "ext4" ]
 	then
 		echo "Running below command to expand file system: resize2fs  $disk_dev_name$mount_point_partition_number" >> $LOGFILE
-		resize2fs  $disk_dev_name$mount_point_partition_number
+		resize2fs  $disk_dev_name$mount_point_partition_number 1>> $LOGFILE
 		echo "The file system size after expandtion , running df -Th $mount_point_requested" >> $LOGFILE
 		df -Th $mount_point_requested >> $LOGFILE
 	else
